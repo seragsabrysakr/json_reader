@@ -299,20 +299,135 @@ class JsonReader {
       rethrow;
     }
   }
-}
 
-Map<String, JsonReader> _getObject(Object? value) {
-  final v = value ?? const <String, dynamic>{};
+  int? asIntOrNull({
+    bool? permissive,
+    int? defaultValue,
+  }) {
+    permissive ??= _config.permissive;
+    defaultValue ??= _config.defaults.defaultInt;
 
-  if (v is Map && v.keys.every((dynamic k) => k is String)) {
-    return Map<String, JsonReader>.fromEntries(
-      (v as Map<String, dynamic>).entries.map(
-            (e) => MapEntry(e.key, JsonReader(e.value)),
-          ),
-    );
+    final v = _json;
+    if (v == null) {
+      return null;
+    }
+
+    if (v is int) {
+      return v;
+    }
+
+    if (permissive) {
+      if (v is num) {
+        return v.toInt();
+      }
+      if (v is String) {
+        return int.tryParse(v);
+      }
+    }
+
+    return null;
   }
 
-  throw ArgumentError('Illegal type: ${v.runtimeType}');
+  double? asDoubleOrNull({
+    bool? permissive,
+    double? defaultValue,
+  }) {
+    permissive ??= _config.permissive;
+    defaultValue ??= _config.defaults.defaultDouble;
+
+    final v = _json;
+    if (v == null) {
+      return null;
+    }
+
+    if (v is double) {
+      return v;
+    }
+
+    if (permissive) {
+      if (v is num) {
+        return v.toDouble();
+      }
+      if (v is String) {
+        return double.tryParse(v);
+      }
+    }
+
+    return null;
+  }
+
+  String? asStringOrNull({
+    bool? permissive,
+    String? defaultValue,
+    bool? trim,
+  }) {
+    permissive ??= _config.permissive;
+    defaultValue ??= _config.defaults.defaultString;
+    trim ??= _config.trimStrings;
+
+    final v = _json;
+    if (v == null) {
+      return null;
+    }
+
+    if (v is String) {
+      if (trim) {
+        return v.trim();
+      }
+      return v;
+    }
+
+    if (permissive) {
+      final result = v.toString();
+      if (trim) {
+        return result.trim();
+      }
+      return result;
+    }
+
+    return null;
+  }
+
+  bool? asBoolOrNull({
+    bool? permissive,
+    bool? defaultValue,
+  }) {
+    permissive ??= _config.permissive;
+    defaultValue ??= _config.defaults.defaultBool;
+
+    final v = _json;
+    if (v == null) {
+      return null;
+    }
+
+    if (v is bool) {
+      return v;
+    }
+
+    if (permissive) {
+      if (v is String) {
+        final lower = v.toLowerCase();
+        if (lower == 'true') {
+          return true;
+        }
+        if (lower == 'false') {
+          return false;
+        }
+        return null;
+      }
+      if (v is num) {
+        if (v == 1) {
+          return true;
+        }
+        if (v == 0) {
+          return false;
+        }
+        return null;
+      }
+    }
+
+    return null;
+  }
 }
 
 List<JsonReader> _getList(Object? value) {
