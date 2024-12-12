@@ -1,4 +1,4 @@
-// ignore_for_file: parameter_assignments
+// ignore_for_file: parameter_assignments, avoid_dynamic_calls
 
 import 'dart:convert';
 
@@ -9,7 +9,7 @@ typedef ListItemMapper<T, R> = R Function(T item);
 class InvalidJsonValueException implements Exception {
   InvalidJsonValueException(this.value);
 
-  final dynamic value;
+  final Object? value;
 
   @override
   String toString() {
@@ -17,62 +17,15 @@ class InvalidJsonValueException implements Exception {
   }
 }
 
-/// Provides safe access to JSON values.
-/// Any null field values are automatically replaced with default ones.
-///
-/// Examples:
-/// Get top field value:
-/// ```
-/// final json = '''
-/// {
-///   "topField": "Hello",
-///   "object1": {
-///      "object2": {
-///         "int": 0
-///      }
-///   }
-/// }
-/// ''';
-/// final value = JsonReader(json)['topField'].asString();
-/// ```
-///
-/// Get nested field value:
-/// ```
-/// final json = '''
-/// {
-///   "object1": {
-///      "object2": {
-///         "int": 0
-///      }
-///   }
-/// }
-/// ''';
-/// final value = JsonReader(json)['object1']['object2']['int'].asInt()
-/// ```
-///
-/// Get nested list of ints:
-/// ```
-/// final json = '''
-/// {
-///   "object1": {
-///      "object2": {
-///         "int": 0,
-///         "list": [0, 1, 2, 3]
-///      }
-///   }
-/// }
-/// ''';
-/// final value = JsonReader(json)['object1']['list'].asListOf<int>();
-/// ```
 class JsonReader {
   JsonReader(
-    Object json, {
-    JsonReaderConfig config,
+    Object? json, {
+    JsonReaderConfig? config,
   })  : _json = json,
-        _config = config ?? JsonReaderConfig() {
+        _config = config ?? JsonReaderConfig.global {
     final isValidJson = _json == null ||
-        _json is Map ||
-        _json is List ||
+        _json is Map<String, dynamic> ||
+        _json is List<dynamic> ||
         _json is String ||
         _json is bool ||
         _json is num;
@@ -84,21 +37,31 @@ class JsonReader {
 
   factory JsonReader.decode(
     String jsonString, {
-    JsonReaderConfig config,
+    JsonReaderConfig? config,
   }) {
     dynamic decodedJson;
     try {
       decodedJson = jsonDecode(jsonString);
-    } catch (_) {}
+    } catch (_) {
+      // Ignore decode errors and return null json
+    }
     return JsonReader(decodedJson, config: config);
   }
 
-  final Object _json;
+  final Object? _json;
   final JsonReaderConfig _config;
 
+  JsonReader operator [](String key) {
+    if (_json is Map<String, dynamic>) {
+      final map = _json as Map<String, dynamic>;
+      return JsonReader(map[key], config: _config);
+    }
+    return JsonReader(null, config: _config);
+  }
+
   int asInt({
-    bool permissive,
-    int defaultValue,
+    bool? permissive,
+    int? defaultValue,
   }) {
     permissive ??= _config.permissive;
     defaultValue ??= _config.defaults.defaultInt;
@@ -128,8 +91,8 @@ class JsonReader {
   }
 
   double asDouble({
-    bool permissive,
-    double defaultValue,
+    bool? permissive,
+    double? defaultValue,
   }) {
     permissive ??= _config.permissive;
     defaultValue ??= _config.defaults.defaultDouble;
@@ -159,9 +122,9 @@ class JsonReader {
   }
 
   String asString({
-    bool permissive,
-    String defaultValue,
-    bool trim,
+    bool? permissive,
+    String? defaultValue,
+    bool? trim,
   }) {
     permissive ??= _config.permissive;
     defaultValue ??= _config.defaults.defaultString;
@@ -183,7 +146,7 @@ class JsonReader {
     }
 
     if (permissive) {
-      final result = v.toString() ?? defaultValue;
+      final result = v.toString();
       if (trim) {
         return result.trim();
       }
@@ -194,8 +157,8 @@ class JsonReader {
   }
 
   bool asBool({
-    bool permissive,
-    bool defaultValue,
+    bool? permissive,
+    bool? defaultValue,
   }) {
     permissive ??= _config.permissive;
     defaultValue ??= _config.defaults.defaultBool;
@@ -213,32 +176,36 @@ class JsonReader {
     }
 
     if (permissive) {
-      if (v is num) {
-        return v > 0;
-      }
       if (v is String) {
-        final lowerCaseValue = v.toLowerCase();
-        if (lowerCaseValue == 'true' || lowerCaseValue == '1') {
+        final lower = v.toLowerCase();
+        if (lower == 'true') {
           return true;
         }
-
-        final parsedNumValue = num.tryParse(lowerCaseValue);
-        if (parsedNumValue != null && parsedNumValue > 0) {
+        if (lower == 'false') {
+          return false;
+        }
+        return defaultValue;
+      }
+      if (v is num) {
+        if (v == 1) {
           return true;
         }
-
-        return false;
+        if (v == 0) {
+          return false;
+        }
+        return defaultValue;
       }
     }
+
     throw ArgumentError('Illegal type: ${v.runtimeType}');
   }
 
   Map<K, V> asMap<K, V>({
-    bool permissive,
-    Map<K, V> defaultValue,
+    bool? permissive,
+    Map<K, V>? defaultValue,
   }) {
     permissive ??= _config.permissive;
-    defaultValue ??= const {};
+    defaultValue ??= <K, V>{};
 
     final v = _json;
     if (v == null) {
@@ -248,33 +215,32 @@ class JsonReader {
       throw ArgumentError.notNull();
     }
 
-    if (v is Map && v.entries.every((e) => e.key is K && e.value is V)) {
-      return v.cast<K, V>();
-    }
-
-    if (v is String) {
-      return JsonReader.decode(v).asMap<K, V>();
+    if (v is Map) {
+      try {
+        return Map<K, V>.from(v);
+      } catch (_) {
+        if (permissive) {
+          return defaultValue;
+        }
+      }
     }
 
     throw ArgumentError.value(_json, 'json', 'must be a Map<$K, $V>');
   }
 
-  List<JsonReader> asList({bool permissive}) {
+  List<JsonReader> asList({bool? permissive}) {
     permissive ??= _config.permissive;
 
     final v = _json;
-    if (v == null && permissive) {
-      return const [];
-    }
     return _getList(v);
   }
 
   List<T> asListOf<T>({
-    bool permissive,
-    List<T> defaultValue,
+    bool? permissive,
+    List<T>? defaultValue,
   }) {
     permissive ??= _config.permissive;
-    defaultValue ??= const [];
+    defaultValue ??= <T>[];
 
     final v = _json;
     if (v == null) {
@@ -284,73 +250,75 @@ class JsonReader {
       throw ArgumentError.notNull();
     }
 
-    if (v is List && v.every((item) => item is T)) {
-      return v.cast<T>();
+    if (v is! List) {
+      if (permissive) {
+        return defaultValue;
+      }
+      throw ArgumentError.value(v, 'json', 'must be a List');
     }
 
-    if (v is String) {
-      return JsonReader.decode(v).asListOf<T>(
-        permissive: permissive,
-        defaultValue: defaultValue,
-      );
+    try {
+      return List<T>.from(v);
+    } catch (_) {
+      if (permissive) {
+        return defaultValue;
+      }
+      rethrow;
     }
-
-    throw ArgumentError.value(_json, 'json', 'must be a List<$T>');
   }
 
-  bool containsKey(Object key) {
+  List<R> asListOfMapped<T, R>({
+    required ListItemMapper<T, R> mapper,
+    bool? permissive,
+    List<R>? defaultValue,
+  }) {
+    permissive ??= _config.permissive;
+    defaultValue ??= <R>[];
+
     final v = _json;
     if (v == null) {
-      return false;
+      if (permissive) {
+        return defaultValue;
+      }
+      throw ArgumentError.notNull();
     }
-    if (v is Map) {
-      return v.containsKey(key);
-    }
-    return false;
-  }
 
-  JsonReader operator [](Object key) {
-    assert(key is int || key is String);
-
-    if (key is int && _json is List) {
-      final list = _getList(_json);
-      final listItemReader = list[key];
-      return listItemReader ?? JsonReader(null);
+    if (v is! List) {
+      if (permissive) {
+        return defaultValue;
+      }
+      throw ArgumentError.value(v, 'json', 'must be a List');
     }
-    if (key is String && _json is Map) {
-      final map = _getObject(_json);
-      final mapItemReader = map[key];
-      return mapItemReader ?? JsonReader(null);
-    }
-    return JsonReader(null);
-  }
 
-  @override
-  String toString() {
     try {
-      return jsonEncode(_json);
+      return v.map((item) => mapper(item as T)).toList();
     } catch (_) {
-      return '';
+      if (permissive) {
+        return defaultValue;
+      }
+      rethrow;
     }
   }
 }
 
-Map<String, JsonReader> _getObject(Object value) {
-  final v = value ?? const <String, JsonReader>{};
+Map<String, JsonReader> _getObject(Object? value) {
+  final v = value ?? const <String, dynamic>{};
 
-  if (v is Map && v.keys.every((k) => k is String)) {
-    return v.map(
-      (k, v) => MapEntry(k, JsonReader(v)),
+  if (v is Map && v.keys.every((dynamic k) => k is String)) {
+    return Map<String, JsonReader>.fromEntries(
+      (v as Map<String, dynamic>).entries.map(
+            (e) => MapEntry(e.key, JsonReader(e.value)),
+          ),
     );
   }
 
   throw ArgumentError('Illegal type: ${v.runtimeType}');
 }
 
-List<JsonReader> _getList(Object value) {
-  final v = value ?? const <JsonReader>[];
+List<JsonReader> _getList(Object? value) {
+  final v = value ?? const <dynamic>[];
   if (v is Iterable) {
-    return v.map((item) => JsonReader(item)).toList();
+    return v.map((dynamic item) => JsonReader(item)).toList();
   }
 
   throw ArgumentError('Illegal type: ${v.runtimeType}');
