@@ -428,6 +428,93 @@ class JsonReader {
 
     return null;
   }
+
+  DateTime asDateTime({
+    bool? permissive,
+    DateTime? defaultValue,
+  }) {
+    permissive ??= _config.permissive;
+    defaultValue ??= _config.defaults.defaultDateTime;
+
+    final v = _json;
+    if (v == null) {
+      if (permissive) {
+        return defaultValue;
+      }
+      throw ArgumentError.notNull();
+    }
+
+    if (v is DateTime) {
+      return v;
+    }
+
+    if (permissive) {
+      if (v is String) {
+        // Try ISO 8601
+        final dateTime = DateTime.tryParse(v);
+        if (dateTime != null) {
+          return dateTime;
+        }
+        
+        // Try Unix timestamp (milliseconds)
+        final timestamp = int.tryParse(v);
+        if (timestamp != null) {
+          return DateTime.fromMillisecondsSinceEpoch(timestamp);
+        }
+        
+        return defaultValue;
+      }
+      
+      if (v is int) {
+        // Assume milliseconds timestamp
+        return DateTime.fromMillisecondsSinceEpoch(v);
+      }
+    }
+
+    throw ArgumentError('Illegal type: ${v.runtimeType}');
+  }
+
+  DateTime? asDateTimeOrNull({
+    bool? permissive,
+    DateTime? defaultValue,
+  }) {
+    permissive ??= _config.permissive;
+    defaultValue ??= _config.defaults.defaultDateTime;
+
+    final v = _json;
+    if (v == null) {
+      return null;
+    }
+
+    if (v is DateTime) {
+      return v;
+    }
+
+    if (permissive) {
+      if (v is String) {
+        // Try ISO 8601
+        final dateTime = DateTime.tryParse(v);
+        if (dateTime != null) {
+          return dateTime;
+        }
+        
+        // Try Unix timestamp (milliseconds)
+        final timestamp = int.tryParse(v);
+        if (timestamp != null) {
+          return DateTime.fromMillisecondsSinceEpoch(timestamp);
+        }
+        
+        return null;
+      }
+      
+      if (v is int) {
+        // Assume milliseconds timestamp
+        return DateTime.fromMillisecondsSinceEpoch(v);
+      }
+    }
+
+    return null;
+  }
 }
 
 List<JsonReader> _getList(Object? value) {

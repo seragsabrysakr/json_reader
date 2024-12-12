@@ -42,5 +42,10 @@ class JsonReaderDefaults {
     _defaults[String] = value;
   }
 
+  DateTime get defaultDateTime => (_defaults[DateTime] as DateTime?) ?? DateTime(1970);
+  set defaultDateTime(DateTime value) {
+    _defaults[DateTime] = value;
+  }
+
   static final JsonReaderDefaults global = JsonReaderDefaults();
 }
